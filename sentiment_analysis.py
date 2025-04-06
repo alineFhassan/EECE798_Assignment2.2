@@ -1,8 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from transformers import pipeline, AutoModelForSequenceClassification, AutoTokenizer
-import torch
-import os
+import requests
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -11,26 +9,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Model configuration
-MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment"
-MODEL_PATH = "saved_model"
-
-def load_or_save_model():
-    if os.path.exists(MODEL_PATH):
-        # Load the saved model and tokenizer
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-    else:
-        # Download and save the model and tokenizer
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        model.save_pretrained(MODEL_PATH)
-        tokenizer.save_pretrained(MODEL_PATH)
-    
-    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
-
-# Initialize the sentiment analysis pipeline
-sentiment_analyzer = load_or_save_model()
+API_URL = "https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-sentiment"
+# Hugging Face API configuration
+HEADERS = {
+    "Authorization": "Bearer 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"
+}
 
 class TextInput(BaseModel):
     text: str
@@ -47,9 +30,40 @@ async def root():
 @app.post("/analyze", response_model=SentimentResponse)
 async def analyze_sentiment(text_input: TextInput):
     try:
-        # Get sentiment analysis result
-        result = sentiment_analyzer(text_input.text)[0]
+        # Make request to Hugging Face Inference API
+        response = requests.post(
+            API_URL,
+            headers=HEADERS,
+            json={"inputs": text_input.text}
+        )
         
+        # Check for errors
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Hugging Face API error: {response.text}"
+            )
+        
+        # Get the results (structure might be different)
+        results = response.json()
+        
+        # Handle cases where the model is still loading
+        if isinstance(results, dict) and 'error' in results:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Model is loading: {results['error']}"
+            )
+        
+        # Find the highest confidence result
+        if isinstance(results, list) and len(results) > 0:
+            # For this model, the output is a list of dictionaries for each label
+            best_result = max(results[0], key=lambda x: x['score'])
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Unexpected response format from Hugging Face API"
+            )
+
         # Map the model's output to our response
         sentiment_mapping = {
             'LABEL_0': 'NEGATIVE',
@@ -58,12 +72,13 @@ async def analyze_sentiment(text_input: TextInput):
         }
         
         return SentimentResponse(
-            sentiment=sentiment_mapping[result['label']],
-            confidence=result['score'],
+            sentiment=sentiment_mapping[best_result['label']],
+            confidence=best_result['score'],
+            label=best_result['label']
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(app, host="0.0.0.0", port=8000)
