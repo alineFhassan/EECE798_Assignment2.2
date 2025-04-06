@@ -47,7 +47,7 @@ A Restful API for summarizing text using a pre-trained Hugging Face Transformers
 A Restful API for translating texts
 
 ### Features
--Translates text from a source language (default: English "en") to a target language (default: French "fr").
+- Translates text from a source language (default: English "en") to a target language (default: French "fr").
 - Uses the Helsinki-NLP/opus-mt-en-fr model, specialized for English→French translation.
 
 - **Testing with Postman** 
