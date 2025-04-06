@@ -16,6 +16,7 @@ HEADERS = {
     "Authorization": "Bearer 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"
 }
 
+
 class TextInput(BaseModel):
     text: str
     min_confidence: float = 0.5  # Optional threshold for confidence filtering
