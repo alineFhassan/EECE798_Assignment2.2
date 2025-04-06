@@ -1,0 +1,10 @@
+name: github
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9  # or another version you prefer
+  - flask
+  - requests
+  - pip
+  - typing-extensions  # for typing support (Optional is included in Python 3.10+)
